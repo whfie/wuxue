@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Wuxue</string>
-    <string name="title_activity_main">Wuxue</string>
+    <string name="app_name">武学查询</string>
+    <string name="title_activity_main">武学查询</string>
     <string name="package_name">com.buzhidao32.wuxue</string>
     <string name="custom_url_scheme">com.buzhidao32.wuxue</string>
 </resources>

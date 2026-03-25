@@ -1,6 +1,6 @@
 {
   "appId": "com.buzhidao32.wuxue",
-  "appName": "Wuxue",
+  "appName": "武学查询",
   "webDir": "www",
   "bundledWebRuntime": false,
   "server": {
