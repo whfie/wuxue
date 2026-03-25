@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
@@ -44,6 +44,7 @@ for (const entry of readdirSync(dataDir)) {
   const jsonPath = path.join(dataDir, entry.replace(/\.gz$/, ""));
   const jsonContent = gunzipSync(readFileSync(gzPath));
   writeFileSync(jsonPath, jsonContent);
+  unlinkSync(gzPath);
 }
 
 const copiedEntries = readdirSync(outputDir).sort();
