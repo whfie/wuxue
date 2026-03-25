@@ -83,12 +83,11 @@ jobs:
         run: |
           chmod +x android/gradlew
           cd android
-          ./gradlew assembleRelease bundleRelease
+          ./gradlew assembleRelease
 
       - name: Rename Android packages
         run: |
           cp android/app/build/outputs/apk/release/app-release.apk android/app/build/outputs/apk/release/武学查询.apk
-          cp android/app/build/outputs/bundle/release/app-release.aab android/app/build/outputs/bundle/release/武学查询.aab
 
       - name: Upload Android artifacts
         uses: actions/upload-artifact@v4
@@ -97,7 +96,6 @@ jobs:
           if-no-files-found: error
           path: |
             ${{ env.APP_DIR }}/android/app/build/outputs/apk/release/武学查询.apk
-            ${{ env.APP_DIR }}/android/app/build/outputs/bundle/release/武学查询.aab
 
       - name: Publish Android packages to Release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -111,62 +109,6 @@ jobs:
             --generate-notes
           gh release upload "$TAG_NAME" \
             android/app/build/outputs/apk/release/武学查询.apk \
-            android/app/build/outputs/bundle/release/武学查询.aab \
             --repo "$GITHUB_REPOSITORY" \
             --clobber
 
-  ios:
-    name: Build iOS
-    runs-on: macos-latest
-
-    defaults:
-      run:
-        shell: bash
-        working-directory: ${{ env.APP_DIR }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: ${{ env.APP_DIR }}/package-lock.json
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build web assets
-        run: npm run build
-
-      - name: Create iOS platform if missing
-        run: |
-          if [ ! -d ios ]; then
-            npx cap add ios
-          fi
-
-      - name: Sync Capacitor iOS
-        run: npx cap sync ios
-
-      - name: Install CocoaPods
-        run: pod install --project-directory=ios/App
-
-      - name: Build iOS app for simulator
-        run: |
-          xcodebuild \
-            -workspace ios/App/App.xcworkspace \
-            -scheme App \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath ios/build \
-            CODE_SIGNING_ALLOWED=NO \
-            build
