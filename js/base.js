@@ -1,6 +1,8 @@
 const baseScriptUrl = document.currentScript?.src || new URL('js/base.js', window.location.href).href;
+const FORCE_REFRESH_TIMEOUT_MS = 90 * 1000;
 let forceRefreshModalInstance = null;
 let forceRefreshRunning = false;
+let forceRefreshAbortController = null;
 
 function toggleOptionMenu(event) {
     const menu = document.getElementById('optionMenu');
@@ -47,9 +49,50 @@ function setForceRefreshStatus(message, type = 'muted') {
     status.textContent = message;
 }
 
+function resetForceRefreshProgress() {
+    const progressWrap = document.getElementById('forceRefreshProgressWrap');
+    const progressBar = document.getElementById('forceRefreshProgressBar');
+    const progressText = document.getElementById('forceRefreshProgressText');
+
+    if (progressWrap) {
+        progressWrap.hidden = true;
+    }
+    if (progressBar) {
+        progressBar.style.width = '0%';
+        progressBar.setAttribute('aria-valuenow', '0');
+        progressBar.textContent = '0%';
+    }
+    if (progressText) {
+        progressText.textContent = '';
+    }
+}
+
+function setForceRefreshProgress(progress) {
+    const progressWrap = document.getElementById('forceRefreshProgressWrap');
+    const progressBar = document.getElementById('forceRefreshProgressBar');
+    const progressText = document.getElementById('forceRefreshProgressText');
+
+    if (!progressWrap || !progressBar || !progressText) {
+        return;
+    }
+
+    const total = Math.max(1, Number(progress.total) || 1);
+    const completed = Math.max(0, Math.min(total, Number(progress.completed) || 0));
+    const percent = Math.round((completed / total) * 100);
+    const stage = progress.stage || '正在更新数据';
+
+    progressWrap.hidden = false;
+    progressBar.style.width = `${percent}%`;
+    progressBar.setAttribute('aria-valuenow', String(percent));
+    progressBar.textContent = `${percent}%`;
+    progressText.textContent = `${stage}（${completed}/${total}）`;
+}
+
 function setForceRefreshPending(isPending) {
     const confirmBtn = document.getElementById('forceRefreshConfirmBtn');
     const cancelBtn = document.getElementById('forceRefreshCancelBtn');
+    const closeBtn = document.getElementById('forceRefreshCloseBtn');
+    const modal = document.getElementById('forceRefreshModal');
     if (confirmBtn) {
         confirmBtn.disabled = isPending;
         confirmBtn.textContent = isPending ? '正在重新拉取...' : '清缓存并刷新';
@@ -57,6 +100,13 @@ function setForceRefreshPending(isPending) {
     if (cancelBtn) {
         cancelBtn.disabled = isPending;
     }
+    if (closeBtn) {
+        closeBtn.disabled = isPending;
+    }
+    if (modal) {
+        modal.classList.toggle('is-running', isPending);
+    }
+    document.body.classList.toggle('force-refresh-running', isPending);
 }
 
 function ensureForceRefreshModal() {
@@ -71,11 +121,17 @@ function ensureForceRefreshModal() {
                 <div class="modal-content">
                     <div class="modal-header">
                         <h5 class="modal-title" id="forceRefreshModalLabel">清缓存并刷新</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+                        <button type="button" class="btn-close" id="forceRefreshCloseBtn" data-bs-dismiss="modal" aria-label="关闭"></button>
                     </div>
                     <div class="modal-body">
                         <p class="mb-2">将重新下载全部数据，成功后刷新当前页面</p>
                         <p class="mb-0 text-muted small">请耐心等待数据导入</p>
+                        <div class="force-refresh-progress mt-3" id="forceRefreshProgressWrap" hidden>
+                            <div class="progress" role="progressbar" aria-label="清缓存刷新进度" aria-valuemin="0" aria-valuemax="100">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" id="forceRefreshProgressBar" style="width: 0%" aria-valuenow="0">0%</div>
+                            </div>
+                            <div class="small text-muted mt-2" id="forceRefreshProgressText" aria-live="polite"></div>
+                        </div>
                         <div class="small mt-3 text-muted" id="forceRefreshStatus" aria-live="polite"></div>
                     </div>
                     <div class="modal-footer">
@@ -88,6 +144,11 @@ function ensureForceRefreshModal() {
     `);
 
     modal = document.getElementById('forceRefreshModal');
+    modal.addEventListener('hide.bs.modal', (event) => {
+        if (forceRefreshRunning) {
+            event.preventDefault();
+        }
+    });
     modal.addEventListener('hidden.bs.modal', () => {
         if (forceRefreshRunning) {
             return;
@@ -96,6 +157,7 @@ function ensureForceRefreshModal() {
         modal.classList.remove('top-modal');
         setForceRefreshStatus('');
         setForceRefreshPending(false);
+        resetForceRefreshProgress();
     });
 
     const confirmBtn = document.getElementById('forceRefreshConfirmBtn');
@@ -115,7 +177,11 @@ function showForceRefreshModal() {
     modal.classList.add('top-modal');
     setForceRefreshStatus('');
     setForceRefreshPending(false);
-    forceRefreshModalInstance = forceRefreshModalInstance || new bootstrap.Modal(modal);
+    resetForceRefreshProgress();
+    forceRefreshModalInstance = forceRefreshModalInstance || new bootstrap.Modal(modal, {
+        backdrop: 'static',
+        keyboard: false
+    });
     forceRefreshModalInstance.show();
 }
 
@@ -125,20 +191,41 @@ async function handleForceRefreshConfirm() {
     }
 
     forceRefreshRunning = true;
+    forceRefreshAbortController = typeof AbortController === 'undefined'
+        ? null
+        : new AbortController();
     setForceRefreshPending(true);
-    setForceRefreshStatus('正在下载最新数据，请稍候...', 'muted');
+    setForceRefreshStatus('下载中请勿关闭页面，完成后会自动刷新。', 'muted');
+    setForceRefreshProgress({
+        completed: 0,
+        total: 1,
+        stage: '正在准备'
+    });
+    const timeoutId = window.setTimeout(() => {
+        forceRefreshAbortController?.abort();
+    }, FORCE_REFRESH_TIMEOUT_MS);
 
     try {
         const serviceUrl = new URL('services/forceRefreshService.js', baseScriptUrl).href;
         const { forceRefreshAllData } = await import(serviceUrl);
-        const result = await forceRefreshAllData();
+        const result = await forceRefreshAllData({
+            signal: forceRefreshAbortController?.signal,
+            onProgress: setForceRefreshProgress
+        });
+        window.clearTimeout(timeoutId);
         setForceRefreshStatus(`已重新拉取 ${result.resourceIds.length} 份数据，正在刷新...`, 'success');
         window.setTimeout(reloadWithCacheBust, 500);
     } catch (error) {
+        window.clearTimeout(timeoutId);
         console.error('Force refresh failed:', error);
         forceRefreshRunning = false;
+        forceRefreshAbortController = null;
         setForceRefreshPending(false);
-        setForceRefreshStatus(`重新拉取失败：${error.message || error}`, 'danger');
+        const isAbort = error?.name === 'AbortError';
+        setForceRefreshStatus(isAbort
+            ? '下载失败：等待时间过长，请检查网络后重试。'
+            : `下载失败：${error.message || error}。请检查网络后重试。`,
+            'danger');
     }
 }
 

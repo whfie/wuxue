@@ -64,6 +64,10 @@ function shouldCooldownOrigin(error) {
         return false;
     }
 
+    if (error.name === 'AbortError') {
+        return false;
+    }
+
     const message = String(error.message || '');
     if (message.startsWith('HTTP error!')) {
         return false;
@@ -144,8 +148,11 @@ async function decodeGzipResponse(response) {
     return JSON.parse(new TextDecoder('utf-8').decode(result));
 }
 
-async function fetchJsonFromCandidate(candidate) {
-    const response = await fetch(candidate, { cache: 'no-store' });
+async function fetchJsonFromCandidate(candidate, options = {}) {
+    const response = await fetch(candidate, {
+        cache: 'no-store',
+        signal: options.signal
+    });
     if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -171,7 +178,7 @@ async function fetchJsonFromCandidates(path, options = {}) {
                 path: normalizedPath,
                 candidate
             });
-            const result = await fetchJsonFromCandidate(candidate);
+            const result = await fetchJsonFromCandidate(candidate, options);
             PATH_FORMAT_HINTS.set(normalizedPath, candidate.endsWith('.gz') ? 'gzip' : 'json');
             clearOriginFailure(candidate);
             debugInfo('fetch.attempt.succeeded', {

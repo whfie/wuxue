@@ -25,6 +25,24 @@ const REMOTE_RESOURCE_OPTIONS = {
     remoteOnly: true
 };
 
+function emitProgress(options, progress) {
+    if (typeof options.onProgress === 'function') {
+        options.onProgress(progress);
+    }
+}
+
+function throwIfAborted(signal) {
+    if (signal?.aborted) {
+        throw new DOMException('操作已超时', 'AbortError');
+    }
+}
+
+function getAbortReason(...settledResults) {
+    return settledResults.find((result) => (
+        result.status === 'rejected' && result.reason?.name === 'AbortError'
+    ))?.reason;
+}
+
 function parseDateVersion(version) {
     if (typeof version !== 'string') {
         return null;
@@ -76,12 +94,19 @@ function getUsableVersionResult(source, settledResult) {
     };
 }
 
-async function resolveForceRefreshSource() {
+async function resolveForceRefreshSource(options = {}) {
     const platform = isNativeApp() ? 'native' : 'browser';
+    const signal = options.signal;
     const [localSettled, remoteSettled] = await Promise.allSettled([
-        fetchJsonFromCandidates(VERSION_PATH, LOCAL_VERSION_OPTIONS),
-        fetchJsonFromCandidates(VERSION_PATH, REMOTE_VERSION_OPTIONS)
+        fetchJsonFromCandidates(VERSION_PATH, { ...LOCAL_VERSION_OPTIONS, signal }),
+        fetchJsonFromCandidates(VERSION_PATH, { ...REMOTE_VERSION_OPTIONS, signal })
     ]);
+    const abortReason = getAbortReason(localSettled, remoteSettled);
+    if (signal?.aborted && abortReason) {
+        throw abortReason;
+    }
+    throwIfAborted(signal);
+
     const localResult = getUsableVersionResult('local', localSettled);
     const remoteResult = getUsableVersionResult('remote', remoteSettled);
 
@@ -138,27 +163,49 @@ async function clearSiteCacheStorage() {
     }
 }
 
-async function forceRefreshAllData() {
+async function forceRefreshAllData(options = {}) {
     const resourceIds = getVersionedResourceIds();
+    const totalSteps = resourceIds.length + 3;
+    let completedSteps = 0;
+
+    const updateProgress = (stage) => {
+        emitProgress(options, {
+            completed: completedSteps,
+            total: totalSteps,
+            stage
+        });
+    };
 
     debugInfo('force_refresh.started', {
         resourceIds
     });
+    updateProgress('正在准备数据源');
 
     try {
-        const refreshSource = await resolveForceRefreshSource();
+        throwIfAborted(options.signal);
+        const refreshSource = await resolveForceRefreshSource(options);
         const versionResult = refreshSource.versionResult;
         const resourceResults = [];
+        completedSteps += 1;
+        updateProgress('正在下载数据');
 
         for (const resourceId of resourceIds) {
+            throwIfAborted(options.signal);
             const definition = getResourceDefinition(resourceId);
-            const result = await fetchJsonFromCandidates(definition.requestPath, refreshSource.resourceOptions);
+            const result = await fetchJsonFromCandidates(definition.requestPath, {
+                ...refreshSource.resourceOptions,
+                signal: options.signal
+            });
             resourceResults.push({
                 definition,
                 result
             });
+            completedSteps += 1;
+            updateProgress('正在下载数据');
         }
 
+        throwIfAborted(options.signal);
+        updateProgress('正在写入缓存');
         const records = [
             {
                 filename: 'version.json',
@@ -179,7 +226,12 @@ async function forceRefreshAllData() {
             throw new Error('新数据已下载，但写入本地缓存失败');
         }
 
+        completedSteps += 1;
+        updateProgress('正在清理浏览器缓存');
+        throwIfAborted(options.signal);
         const clearedCacheStorageNames = await clearSiteCacheStorage();
+        completedSteps += 1;
+        updateProgress('即将刷新页面');
 
         debugInfo('force_refresh.completed', {
             sourceMode: refreshSource.sourceMode,

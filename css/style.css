@@ -353,6 +353,24 @@ pre {
     max-width: 420px;
 }
 
+.force-refresh-modal.is-running .btn-close,
+.force-refresh-modal.is-running #forceRefreshCancelBtn {
+    cursor: not-allowed;
+}
+
+.force-refresh-progress .progress {
+    height: 1.25rem;
+}
+
+.force-refresh-progress .progress-bar {
+    min-width: 2.5rem;
+}
+
+body.force-refresh-running #optionMenu a,
+body.force-refresh-running #optionMenu button {
+    pointer-events: none;
+}
+
 @media (max-width: 576px) {
     .force-refresh-modal .modal-dialog {
         margin: 0.75rem;
