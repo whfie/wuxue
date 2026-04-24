@@ -115,9 +115,9 @@ export function getMethodName(methodId) {
 // 获取武学属性
 export function getElementName(elementId) {
     const elementname = {
-        "1": "无属性",
-        "3": "阳属性",
-        "5": "阴属性",
+        "1": "无性",
+        "3": "阳性",
+        "5": "阴性",
         "7": "混元",
         "9": "外功"
     };
@@ -135,7 +135,7 @@ export function getWeapontype(weapontypeId) {
         "daofa2": "短刀",
         "daofa3": "弯刀",
         "daofa4": "大环刀",
-        "daofa5": "双刀斩",
+        "daofa5": "双刃斧",
         "gunfa1": "长棍",
         "gunfa2": "长枪",
         "gunfa3": "三节棍",
@@ -144,8 +144,8 @@ export function getWeapontype(weapontypeId) {
         "bianfa1": "长鞭",
         "bianfa2": "软鞭",
         "bianfa3": "九节鞭",
-        "bianfa4": "杖子鞭",
-        "bianfa5": "链子镖",
+        "bianfa4": "杆子鞭",
+        "bianfa5": "链枷",
         "anqi1": "锥形暗器",
         "anqi2": "圆形暗器",
         "anqi3": "针形暗器",
