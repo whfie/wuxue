@@ -5,4 +5,6 @@ export const calcParamNames = {
   z1: "技能系数",
   avgqiatk: "平均气血攻击",
   wdamage: "武器伤害力",
+  buff1Num: "增益数量",
+  buff2Num: "减益数量"
 };

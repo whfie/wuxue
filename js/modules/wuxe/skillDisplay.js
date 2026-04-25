@@ -148,7 +148,11 @@ export function showEffectDetails(
             .replace(/\belse\b(?!\s*if)/g, "} else {")
             .replace(/\bend\b/g, "}")
             .replace(/\band\b/g, "&&")
-            .replace(/\bor\b/g, "||");
+            .replace(/\bor\b/g, "||")
+            .replace(
+              /\brandom\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)/g,
+              "($1 + $2) / 2",
+            );
 
           jsScript = jsScript
             .split("\n")
@@ -197,17 +201,31 @@ export function showEffectDetails(
         let allVars = new Set();
         const compiledFormulas = formulas.map((f) => {
           const jsScript = parseScriptToJS(f.script);
-          const vars = extractVariables(f.script);
+          const vars = extractVariables(jsScript);
           vars.forEach((v) => allVars.add(v));
           return { key: f.key, jsScript, vars };
         });
 
         allVars = Array.from(allVars);
 
+        // 使用统一的缓存键保存所有参数
+        const cacheKey = "calc_params_all";
+        let cachedValues = {};
+        try {
+          const cached = localStorage.getItem(cacheKey);
+          if (cached) {
+            cachedValues = JSON.parse(cached);
+          }
+        } catch (e) {
+          console.warn("Failed to load cached values:", e);
+        }
+
         let inputsHtml = '<h6>计算参数</h6><div class="row g-2 mb-2">';
         allVars.forEach((v) => {
           let defVal = 0;
-          if (defaultParams && defaultParams[v] !== undefined) {
+          if (cachedValues[v] !== undefined) {
+            defVal = cachedValues[v];
+          } else if (defaultParams && defaultParams[v] !== undefined) {
             defVal = defaultParams[v];
           }
           const labelName = calcParamNames[v] ? calcParamNames[v] : v;
@@ -228,6 +246,17 @@ export function showEffectDetails(
           calcContainer.querySelectorAll(".calc-input").forEach((input) => {
             values[input.dataset.var] = parseFloat(input.value) || 0;
           });
+
+          // 保存参数值到缓存（保留其他参数，不保存z开头的参数）
+          try {
+            const valuesToSave = Object.entries(values)
+              .filter(([key]) => !/^z\d+$/.test(key))
+              .reduce((obj, [key, val]) => ({ ...obj, [key]: val }), {});
+            const updatedValues = { ...cachedValues, ...valuesToSave };
+            localStorage.setItem(cacheKey, JSON.stringify(updatedValues));
+          } catch (e) {
+            console.warn("Failed to save cached values:", e);
+          }
 
           const resultsDiv = calcContainer.querySelector("#calcResults");
           let resultsHtml = "";
@@ -263,8 +292,6 @@ export function showEffectDetails(
         if (calcButton) {
           calcButton.addEventListener("click", updateResults);
         }
-
-        updateResults();
       }
     }
 
