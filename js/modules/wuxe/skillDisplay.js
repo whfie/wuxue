@@ -116,157 +116,154 @@ export function showEffectDetails(
 
     contentElement.innerHTML = jsonToHtmlWithEffectLinks(displayData, effectId);
 
-    if (effectData.type === "属性变化") {
-      const formulas = [];
-      for (const key in effectData) {
-        if (key.startsWith("arg")) {
-          const val = effectData[key];
-          if (typeof val === "string") {
-            if (
-              !isPotentialEffectId(val) &&
-              val.trim() !== "" &&
-              (/\bz\d+\b/.test(val) || val.includes("return"))
-            ) {
-              formulas.push({ key, script: val });
-            }
+    // if (effectData.type === "属性变化") {
+    const formulas = [];
+    for (const key in effectData) {
+      if (key.startsWith("arg")) {
+        const val = effectData[key];
+        if (typeof val === "string") {
+          if (
+            !isPotentialEffectId(val) &&
+            val.trim() !== "" &&
+            (/\bz\d+\b/.test(val) || val.includes("return"))
+          ) {
+            formulas.push({ key, script: val });
           }
         }
       }
+    }
 
-      if (formulas.length > 0) {
-        const calcContainer = document.createElement("div");
-        calcContainer.className =
-          "effect-calculator mb-3 p-3 border rounded bg-light";
+    if (formulas.length > 0) {
+      const calcContainer = document.createElement("div");
+      calcContainer.className =
+        "effect-calculator mb-3 p-3 border rounded bg-light";
 
-        // 解析Lua风格脚本为JS
-        const parseScriptToJS = (luaScript) => {
-          let jsScript = luaScript
-            .replace(/\r\n/g, "\n")
-            .replace(/\r/g, "\n")
-            .replace(/\belseif\b\s+(.*?)\s+\bthen\b/g, "} else if ($1) {")
-            .replace(/\bif\b\s+(.*?)\s+\bthen\b/g, "if ($1) {")
-            .replace(/\belse\b(?!\s*if)/g, "} else {")
-            .replace(/\bend\b/g, "}")
-            .replace(/\band\b/g, "&&")
-            .replace(/\bor\b/g, "||")
-            .replace(
-              /\brandom\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)/g,
-              "($1 + $2) / 2",
-            );
+      // 解析Lua风格脚本为JS
+      const parseScriptToJS = (luaScript) => {
+        let jsScript = luaScript
+          .replace(/\r\n/g, "\n")
+          .replace(/\r/g, "\n")
+          .replace(/\belseif\b\s+(.*?)\s+\bthen\b/g, "} else if ($1) {")
+          .replace(/\bif\b\s+(.*?)\s+\bthen\b/g, "if ($1) {")
+          .replace(/\belse\b(?!\s*if)/g, "} else {")
+          .replace(/\bend\b/g, "}")
+          .replace(/\band\b/g, "&&")
+          .replace(/\bor\b/g, "||")
+          .replace(/\brandom\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)/g, "($1 + $2) / 2");
 
-          jsScript = jsScript
-            .split("\n")
-            .map((line) => {
-              if (line.includes("return") && !line.trim().endsWith(";")) {
-                return line + ";";
-              }
-              return line;
-            })
-            .join("\n");
-
-          if (!jsScript.includes("return")) {
-            jsScript = `return ${jsScript};`;
-          }
-          return jsScript;
-        };
-
-        const extractVariables = (script) => {
-          const varRegex = /[a-zA-Z_]\w*/g;
-          const keywords = [
-            "if",
-            "then",
-            "else",
-            "elseif",
-            "end",
-            "return",
-            "and",
-            "or",
-            "math",
-            "floor",
-            "ceil",
-            "abs",
-            "min",
-            "max",
-          ];
-          const vars = new Set();
-          let match;
-          while ((match = varRegex.exec(script)) !== null) {
-            if (!keywords.includes(match[0])) {
-              vars.add(match[0]);
+        jsScript = jsScript
+          .split("\n")
+          .map((line) => {
+            if (line.includes("return") && !line.trim().endsWith(";")) {
+              return line + ";";
             }
-          }
-          return Array.from(vars);
-        };
+            return line;
+          })
+          .join("\n");
 
-        let allVars = new Set();
-        const compiledFormulas = formulas.map((f) => {
-          const jsScript = parseScriptToJS(f.script);
-          const vars = extractVariables(jsScript);
-          vars.forEach((v) => allVars.add(v));
-          return { key: f.key, jsScript, vars };
-        });
-
-        allVars = Array.from(allVars);
-
-        // 使用统一的缓存键保存所有参数
-        const cacheKey = "calc_params_all";
-        let cachedValues = {};
-        try {
-          const cached = localStorage.getItem(cacheKey);
-          if (cached) {
-            cachedValues = JSON.parse(cached);
-          }
-        } catch (e) {
-          console.warn("Failed to load cached values:", e);
+        if (!jsScript.includes("return")) {
+          jsScript = `return ${jsScript};`;
         }
+        return jsScript;
+      };
 
-        let inputsHtml = '<h6>计算参数</h6><div class="row g-2 mb-2">';
-        allVars.forEach((v) => {
-          let defVal = 0;
-          if (cachedValues[v] !== undefined) {
-            defVal = cachedValues[v];
-          } else if (defaultParams && defaultParams[v] !== undefined) {
-            defVal = defaultParams[v];
+      const extractVariables = (script) => {
+        const varRegex = /[a-zA-Z_]\w*/g;
+        const keywords = [
+          "if",
+          "then",
+          "else",
+          "elseif",
+          "end",
+          "return",
+          "and",
+          "or",
+          "math",
+          "floor",
+          "ceil",
+          "abs",
+          "min",
+          "max",
+        ];
+        const vars = new Set();
+        let match;
+        while ((match = varRegex.exec(script)) !== null) {
+          if (!keywords.includes(match[0])) {
+            vars.add(match[0]);
           }
-          const labelName = calcParamNames[v] ? calcParamNames[v] : v;
-          inputsHtml += `
+        }
+        return Array.from(vars);
+      };
+
+      let allVars = new Set();
+      const compiledFormulas = formulas.map((f) => {
+        const jsScript = parseScriptToJS(f.script);
+        const vars = extractVariables(jsScript);
+        vars.forEach((v) => allVars.add(v));
+        return { key: f.key, jsScript, vars };
+      });
+
+      allVars = Array.from(allVars);
+
+      // 使用统一的缓存键保存所有参数
+      const cacheKey = "calc_params_all";
+      let cachedValues = {};
+      try {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          cachedValues = JSON.parse(cached);
+        }
+      } catch (e) {
+        console.warn("Failed to load cached values:", e);
+      }
+
+      let inputsHtml = '<h6>计算参数</h6><div class="row g-2 mb-2">';
+      allVars.forEach((v) => {
+        let defVal = 0;
+        if (cachedValues[v] !== undefined) {
+          defVal = cachedValues[v];
+        } else if (defaultParams && defaultParams[v] !== undefined) {
+          defVal = defaultParams[v];
+        }
+        const labelName = calcParamNames[v] ? calcParamNames[v] : v;
+        inputsHtml += `
             <div class="col-4">
               <label class="form-label mb-0" style="font-size: 0.8rem;" title="${v}">${labelName}</label>
               <input type="number" class="form-control form-control-sm calc-input" data-var="${v}" value="${defVal}">
             </div>`;
+      });
+      inputsHtml +=
+        '</div><div class="mt-2"><button type="button" class="btn btn-primary btn-sm" id="calcButton">计算</button></div><hr><div id="calcResults"></div>';
+      calcContainer.innerHTML = inputsHtml;
+
+      modalBody.insertBefore(calcContainer, contentElement);
+
+      const updateResults = () => {
+        const values = {};
+        calcContainer.querySelectorAll(".calc-input").forEach((input) => {
+          values[input.dataset.var] = parseFloat(input.value) || 0;
         });
-        inputsHtml +=
-          '</div><div class="mt-2"><button type="button" class="btn btn-primary btn-sm" id="calcButton">计算</button></div><hr><div id="calcResults"></div>';
-        calcContainer.innerHTML = inputsHtml;
 
-        modalBody.insertBefore(calcContainer, contentElement);
+        // 保存参数值到缓存（保留其他参数，不保存z开头的参数）
+        try {
+          const valuesToSave = Object.entries(values)
+            .filter(([key]) => !/^z\d+$/.test(key))
+            .reduce((obj, [key, val]) => ({ ...obj, [key]: val }), {});
+          const updatedValues = { ...cachedValues, ...valuesToSave };
+          localStorage.setItem(cacheKey, JSON.stringify(updatedValues));
+        } catch (e) {
+          console.warn("Failed to save cached values:", e);
+        }
 
-        const updateResults = () => {
-          const values = {};
-          calcContainer.querySelectorAll(".calc-input").forEach((input) => {
-            values[input.dataset.var] = parseFloat(input.value) || 0;
-          });
+        const resultsDiv = calcContainer.querySelector("#calcResults");
+        let resultsHtml = "";
 
-          // 保存参数值到缓存（保留其他参数，不保存z开头的参数）
+        compiledFormulas.forEach((f) => {
           try {
-            const valuesToSave = Object.entries(values)
-              .filter(([key]) => !/^z\d+$/.test(key))
-              .reduce((obj, [key, val]) => ({ ...obj, [key]: val }), {});
-            const updatedValues = { ...cachedValues, ...valuesToSave };
-            localStorage.setItem(cacheKey, JSON.stringify(updatedValues));
-          } catch (e) {
-            console.warn("Failed to save cached values:", e);
-          }
-
-          const resultsDiv = calcContainer.querySelector("#calcResults");
-          let resultsHtml = "";
-
-          compiledFormulas.forEach((f) => {
-            try {
-              const argNames = Object.keys(values);
-              const argVals = Object.values(values);
-              // 提供math中的函数兼容
-              const funcBody = `
+            const argNames = Object.keys(values);
+            const argVals = Object.values(values);
+            // 提供math中的函数兼容
+            const funcBody = `
                 const math = Math;
                 const min = Math.min;
                 const max = Math.max;
@@ -275,25 +272,25 @@ export function showEffectDetails(
                 const ceil = Math.ceil;
                 ${f.jsScript}
               `;
-              const func = new Function(...argNames, funcBody);
-              let res = func(...argVals);
-              if (typeof res === "number") {
-                res = Math.round(res);
-              }
-              resultsHtml += `<div><strong>${f.key}</strong>: ${res}</div>`;
-            } catch (e) {
-              resultsHtml += `<div><strong>${f.key}</strong>: <span class="text-danger">计算错误 (${e.message})</span></div>`;
+            const func = new Function(...argNames, funcBody);
+            let res = func(...argVals);
+            if (typeof res === "number") {
+              res = parseFloat(res.toFixed(4));
             }
-          });
-          resultsDiv.innerHTML = resultsHtml;
-        };
+            resultsHtml += `<div><strong>${f.key}</strong>: ${res}</div>`;
+          } catch (e) {
+            resultsHtml += `<div><strong>${f.key}</strong>: <span class="text-danger">计算错误 (${e.message})</span></div>`;
+          }
+        });
+        resultsDiv.innerHTML = resultsHtml;
+      };
 
-        const calcButton = calcContainer.querySelector("#calcButton");
-        if (calcButton) {
-          calcButton.addEventListener("click", updateResults);
-        }
+      const calcButton = calcContainer.querySelector("#calcButton");
+      if (calcButton) {
+        calcButton.addEventListener("click", updateResults);
       }
     }
+    // }
 
     contentElement.querySelectorAll(".json-effect-link").forEach((link) => {
       link.addEventListener("click", (e) => {
