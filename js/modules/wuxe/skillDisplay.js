@@ -26,7 +26,7 @@ function parseEffects(effectsStr) {
 }
 
 // 创建效果链接
-export function createEffectLinks(effectsStr) {
+export function createEffectLinks(effectsStr, cost) {
   if (!effectsStr) return effectsStr;
   const regex = /\{"([^"]+)"((?:\s*,\s*[^,}]+)*)\}/g;
   let result = effectsStr.replace(regex, (match, id, args) => {
@@ -34,7 +34,8 @@ export function createEffectLinks(effectsStr) {
     if (args && args.trim().startsWith(",")) {
       zValues = args.trim().substring(1);
     }
-    return `{<span class="effect-link" data-effect-id="${id}" data-z="${zValues}" style="color: #007bff; text-decoration: underline; cursor: pointer;">"${id}"</span>${args}}`;
+    const costAttr = cost !== undefined ? ` data-cost="${cost}"` : "";
+    return `{<span class="effect-link" data-effect-id="${id}" data-z="${zValues}"${costAttr} style="color: #007bff; text-decoration: underline; cursor: pointer;">"${id}"</span>${args}}`;
   });
   return result;
 }
@@ -149,6 +150,7 @@ export function showEffectDetails(
           .replace(/\bend\b/g, "}")
           .replace(/\band\b/g, "&&")
           .replace(/\bor\b/g, "||")
+          .replace(/\^/g, "**")
           .replace(/\brandom\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)/g, "($1 + $2) / 2");
 
         jsScript = jsScript
@@ -244,10 +246,10 @@ export function showEffectDetails(
           values[input.dataset.var] = parseFloat(input.value) || 0;
         });
 
-        // 保存参数值到缓存（保留其他参数，不保存z开头的参数）
+        // 保存参数值到缓存（保留其他参数，不保存z开头和cost参数）
         try {
           const valuesToSave = Object.entries(values)
-            .filter(([key]) => !/^z\d+$/.test(key))
+            .filter(([key]) => !/^z\d+$/.test(key) && key !== "cost")
             .reduce((obj, [key, val]) => ({ ...obj, [key]: val }), {});
           const updatedValues = { ...cachedValues, ...valuesToSave };
           localStorage.setItem(cacheKey, JSON.stringify(updatedValues));
@@ -258,11 +260,29 @@ export function showEffectDetails(
         const resultsDiv = calcContainer.querySelector("#calcResults");
         let resultsHtml = "";
 
+        // 定义参数标签映射关系
+        const paramLabelMap = {
+          default: {
+            arg2: "计算结果",
+          },
+          汲取: {
+            arg2: "消去内力",
+            arg3: "回复内力",
+          },
+        };
+        const effectType = effectData.type || "default";
+        const currentLabelMap =
+          paramLabelMap[effectType] || paramLabelMap.default;
+
+        // 检查当前effectType是否在映射关系中
+        const hasTypeMapping = effectType in paramLabelMap;
+
+        // 先计算所有结果，用于后续处理
+        const allResults = {};
         compiledFormulas.forEach((f) => {
           try {
             const argNames = Object.keys(values);
             const argVals = Object.values(values);
-            // 提供math中的函数兼容
             const funcBody = `
                 const math = Math;
                 const min = Math.min;
@@ -277,9 +297,41 @@ export function showEffectDetails(
             if (typeof res === "number") {
               res = parseFloat(res.toFixed(4));
             }
-            resultsHtml += `<div><strong>${f.key}</strong>: ${res}</div>`;
+            allResults[f.key] = res;
           } catch (e) {
-            resultsHtml += `<div><strong>${f.key}</strong>: <span class="text-danger">计算错误 (${e.message})</span></div>`;
+            allResults[f.key] = null;
+          }
+        });
+
+        // 生成结果HTML
+        let isFirstFormula = true;
+        compiledFormulas.forEach((f) => {
+          const res = allResults[f.key];
+          if (res === null) {
+            resultsHtml += `<div><strong>${f.key}</strong>: <span class="text-danger">计算错误</span></div>`;
+          } else {
+            // 获取参数标签
+            let labelName;
+            if (!hasTypeMapping && isFirstFormula && effectData.name) {
+              // 当effectType不在映射关系中时，第一个标签优先使用effectData.name
+              labelName = effectData.name;
+            } else {
+              // 其余情况使用映射关系
+              labelName = currentLabelMap[f.key] || f.key;
+            }
+
+            // 特殊处理：汲取类型下，arg3的结果 = arg3结果 * arg2结果
+            let displayRes = res;
+            if (
+              effectType === "汲取" &&
+              f.key === "arg3" &&
+              allResults["arg2"] !== null
+            ) {
+              displayRes = parseFloat((-res * allResults["arg2"]).toFixed(4));
+            }
+
+            resultsHtml += `<div><strong>${labelName}</strong>: ${displayRes}</div>`;
+            isFirstFormula = false;
           }
         });
         resultsDiv.innerHTML = resultsHtml;
@@ -508,7 +560,7 @@ export function showActiveSkills(skillId, activeSkillData, name) {
             )
             .map(([key, value]) => {
               if (key === "effects") {
-                return `${key}: ${createEffectLinks(value)}`;
+                return `${key}: ${createEffectLinks(value, skill.data.cost)}`;
               }
               return `${key}: ${value}`;
             })
@@ -539,12 +591,16 @@ export function showActiveSkills(skillId, activeSkillData, name) {
     if (link) {
       const effectId = link.getAttribute("data-effect-id");
       const zValuesStr = link.getAttribute("data-z");
+      const costValue = link.getAttribute("data-cost");
       let defaultParams = {};
       if (zValuesStr) {
         const parts = zValuesStr.split(",");
         parts.forEach((p, idx) => {
           defaultParams[`z${idx + 1}`] = parseFloat(p.trim()) || 0;
         });
+      }
+      if (costValue !== null) {
+        defaultParams["cost"] = parseFloat(costValue) || 0;
       }
       showEffectDetails(effectId, activeSkillData, defaultParams);
     }
@@ -636,7 +692,9 @@ export function updateSkillList(skillData, matchesFilters) {
               '<div class="alert alert-danger">加载技能数据时出错</div>';
           }
 
-          modal.show();
+          // modal.show();
+          // 武学窗口也使用模态框管理器打开，以修复第一次点击打开效果详情时被武学窗口挡住的问题
+          modalManager.open(modal, document.getElementById("jsonModal"));
         };
 
         const cardHeader = document.createElement("div");
