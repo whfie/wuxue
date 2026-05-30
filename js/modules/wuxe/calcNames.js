@@ -51,7 +51,7 @@ export const calcSelectParams = [
     default: 0,
   },
   {
-    pattern: /^combatStack\d+num$/,
+    pattern: /^combatStack(14|15|20)num$/,
     label: "隐脉加成",
     options: [
       { label: "无", value: 0 },

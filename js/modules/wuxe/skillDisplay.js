@@ -5,6 +5,9 @@ import {
   getElementName,
   getWeapontype,
   skillData,
+  createEffectIdLinks,
+  getEnterEffectLinks,
+  getPassiveEffectLinks,
 } from "./dataLoader.js";
 import { modalManager, effectModal } from "./uiManager.js";
 import { calcParamNames, calcSelectParams } from "./calcNames.js";
@@ -687,17 +690,36 @@ export function showActiveSkills(skillId, activeSkillData, name) {
 
       selectedSkills.forEach((skill, index) => {
         if (index <= 9) {
-          const skillText = Object.entries(skill.data)
-            .filter(([key, value]) =>
+          const textParts = [];
+          Object.entries(skill.data)
+            .filter(([key]) =>
               ["desc", "pvpcd", "cost", "effects"].includes(key),
             )
-            .map(([key, value]) => {
+            .forEach(([key, value]) => {
               if (key === "effects") {
-                return `${key}: ${createEffectLinks(value, skill.data.cost)}`;
+                textParts.push(
+                  `主动效果: ${createEffectLinks(value, skill.data.cost)}`,
+                );
+                // 在主动效果下方追加入场效果与被动效果
+                const enterLinks = getEnterEffectLinks(
+                  activeSkillData,
+                  skill.id,
+                );
+                const passiveLinks = getPassiveEffectLinks(
+                  activeSkillData,
+                  skill.id,
+                );
+                if (enterLinks) {
+                  textParts.push(`入场效果: ${enterLinks}`);
+                }
+                if (passiveLinks) {
+                  textParts.push(`被动效果: ${passiveLinks}`);
+                }
+              } else {
+                textParts.push(`${key}: ${value}`);
               }
-              return `${key}: ${value}`;
-            })
-            .join("<br>");
+            });
+          const skillText = textParts.join("<br>");
 
           if (skillText) {
             const isHidden = index < 8 ? 'style="display: none;"' : "";
