@@ -210,9 +210,19 @@ export function showEffectDetails(
         return { key: f.key, jsScript, vars };
       });
 
+      // 提取 duration 中的变量，确保它们也能生成输入框
+      if (typeof effectData.duration === "string") {
+        const durScript = parseScriptToJS(effectData.duration);
+        const durVars = extractVariables(durScript);
+        durVars.forEach((v) => allVars.add(v));
+      }
+
       allVars = Array.from(allVars);
 
-      // 检测特殊arg1类型（z3不显示在输入框，直接从defaultParams取）
+      // z2、z3 不显示在输入框，直接从 defaultParams 取
+      allVars = allVars.filter((v) => v !== "z2" && v !== "z3");
+
+      // 检测特殊arg1类型判断
       const specialArg1Values = [
         "qiAutoAtkFactor",
         "qiAutoDefFactor",
@@ -220,9 +230,6 @@ export function showEffectDetails(
         "qiActiveDefFactor",
       ];
       const isSpecialArg1 = specialArg1Values.includes(effectData.arg1);
-      if (isSpecialArg1) {
-        allVars = allVars.filter((v) => v !== "z3");
-      }
 
       // 使用统一的缓存键保存所有参数
       const cacheKey = "calc_params_all";
@@ -287,8 +294,11 @@ export function showEffectDetails(
           values[input.dataset.var] = parseFloat(input.value) || 0;
         });
 
-        // 特殊arg1类型：z3不在输入框，直接从defaultParams注入
-        if (isSpecialArg1 && defaultParams["z3"] !== undefined) {
+        // z2、z3 不在输入框中，直接从 defaultParams 注入供计算使用
+        if (defaultParams["z2"] !== undefined) {
+          values["z2"] = defaultParams["z2"];
+        }
+        if (defaultParams["z3"] !== undefined) {
           values["z3"] = defaultParams["z3"];
         }
 

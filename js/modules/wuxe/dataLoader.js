@@ -224,7 +224,10 @@ export function getEnterEffectLinks(activeSkillData, activeLevelId) {
   if (!activeSkillData?.enterEffect) return "";
   const links = [];
   for (const [key, entry] of Object.entries(activeSkillData.enterEffect)) {
-    if ((entry.id === activeLevelId || key === activeLevelId) && entry.effectId) {
+    if (
+      (entry.id === activeLevelId || key === activeLevelId) &&
+      entry.effectId
+    ) {
       links.push(createEffectIdLinks(entry.effectId));
     }
   }
