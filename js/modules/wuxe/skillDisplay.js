@@ -44,8 +44,65 @@ export function createEffectLinks(effectsStr, cost) {
 }
 
 // 检查字符串是否可能是效果ID
+// 规律分析（基于2445个实际效果ID）：
+// 1. 以大写字母开头（占99%）：可包含大写、数字、小写
+//    - 纯大写+数字（占74%）：JIQU12, DYC1
+//    - 大写+驼峰（混合大小写）：HJTJIN1CheckBJ
+// 2. 以ff_开头的格式（占1%，全部618个）：ff_GJS_J4Lv3
 function isPotentialEffectId(str) {
-  return typeof str === "string" && /^[A-Z0-9]+$/.test(str) && str.length >= 2;
+  if (typeof str !== "string" || str.length < 2) return false;
+
+  // 排除已知的参数字段名
+  const excludedFields = new Set([
+    "arg1",
+    "arg2",
+    "arg3",
+    "arg4",
+    "arg5",
+    "duration",
+    "effectType",
+    "cost",
+    "name",
+    "type",
+    "target",
+    "id",
+    "property",
+    "beginDesc",
+    "endDesc",
+    "doDesc",
+    "activeZhaoAtkDamageClass",
+    "activeZhaoAtkDamageParam",
+    "skillText",
+    "action",
+    "atk",
+    "dam",
+    "hitRate",
+    "lv",
+    "preDuration",
+    "aftDuration",
+    "damageType",
+    "effects",
+    ...Object.keys(calcParamNames), // 排除所有计算参数名
+  ]);
+
+  if (excludedFields.has(str)) return false;
+
+  // 动态检查是否匹配calcSelectParams中的任何参数模式
+  for (const selectParam of calcSelectParams) {
+    if (selectParam.pattern.test(str)) {
+      return false; // 匹配了选择框参数，排除
+    }
+  }
+
+  // 规则1：以大写字母开头，后续为大写/数字/小写的任意组合（占99%）
+  // 例: JIQU12, DYC1, HJTJIN1CheckBJ
+  if (/^[A-Z][A-Z0-9a-z]*$/.test(str)) return true;
+
+  // 规则2：精确匹配ff_开头的格式（占1%，全部小写开头ID都是这个模式）
+  // 例: ff_GJS_J4Lv3, ff_GJJSB2_J4Lv8
+  if (/^ff_[A-Z_]/.test(str)) return true;
+
+  return false;
 }
 
 // 递归处理JSON对象中的效果ID
@@ -58,6 +115,10 @@ function processEffectIds(obj, currentId, processedIds = new Set()) {
   const result = {};
 
   for (const [key, value] of Object.entries(obj)) {
+    console.log(
+      `Processing key: ${key}, value: ${value}`,
+      isPotentialEffectId(value),
+    );
     if (
       key.startsWith("arg") &&
       isPotentialEffectId(value) &&
