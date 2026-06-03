@@ -1,12 +1,52 @@
 // UI管理模块
 import {
   activeSkillData,
-  skillAutoData,
   getElementName,
   getMethodName,
 } from "./dataLoader.js";
 import { updateSkillList } from "./skillDisplay.js"; // 导入 updateSkillList 函数
 import { skillData } from "./wuxue.js"; // 导入 skillData
+
+// 搜索索引：初始化后建立，key 为 skillId，value 为可搜索文本展开字符串
+let searchIndex = new Map();
+
+/**
+ * 在 activeSkillData 加载完成后调用，将 effect JSON 预先序列化为索引。
+ * @param {object} skillsData - skill.json 内容
+ * @param {object} activeSkillDataArg - activeZhao 数据
+ */
+export function buildSearchIndex(skillsData, activeSkillDataArg) {
+  searchIndex.clear();
+  if (!skillsData?.skills || !activeSkillDataArg?.skillRelation) return;
+
+  for (const [skillId, skill] of Object.entries(skillsData.skills)) {
+    const parts = [];
+
+    for (const [, relation] of Object.entries(
+      activeSkillDataArg.skillRelation,
+    )) {
+      if (relation.skillId !== skillId) continue;
+
+      const activeSkill = activeSkillDataArg.ActiveZhao[relation.id];
+      if (!activeSkill) continue;
+
+      for (const val of Object.values(activeSkill)) {
+        if (val != null) parts.push(String(val));
+      }
+
+      if (activeSkill.effects && activeSkillDataArg.Effect) {
+        const effectRegex = /\{"([^"]+)"/g;
+        let m;
+        while ((m = effectRegex.exec(activeSkill.effects)) !== null) {
+          const effectData = activeSkillDataArg.Effect[m[1]];
+          if (effectData) parts.push(JSON.stringify(effectData));
+        }
+      }
+    }
+
+    searchIndex.set(skillId, parts.join(" ").toLowerCase());
+  }
+}
 
 // 模态窗口管理器
 export const modalManager = {
@@ -179,61 +219,12 @@ export function matchesFilters(skill) {
       return String(value).toLowerCase().includes(searchText);
     });
 
-  // 扩展搜索：检查关联的主动技能名称、被动的skillText、以及关联的effectData
+  // 扩展搜索：查询预建索引（包含关联主动技能名称及 effect）
   let activeSkillMatch = !searchText;
-  if (
-    searchText &&
-    !searchMatch &&
-    activeSkillData &&
-    activeSkillData.skillRelation
-  ) {
-    // 遍历所有主动技能关系，查找与当前武学关联的主动技能
-    for (const [activeSkillId, relation] of Object.entries(
-      activeSkillData.skillRelation,
-    )) {
-      if (relation.skillId === skill.id) {
-        // 获取主动技能的基础ID
-        const baseSkillId = relation.id;
-        // 获取主动技能数据
-        const activeSkill = activeSkillData.ActiveZhao[baseSkillId];
-        if (activeSkill) {
-          if (
-            activeSkill.name &&
-            activeSkill.name.toLowerCase().includes(searchText)
-          ) {
-            activeSkillMatch = true;
-            break;
-          }
-          for (const key in activeSkill) {
-            if (
-              typeof activeSkill[key] === "string" &&
-              activeSkill[key].toLowerCase().includes(searchText)
-            ) {
-              activeSkillMatch = true;
-              break;
-            }
-          }
-          // 检查 ActiveZhao 中的 effects
-          if (activeSkill.effects && activeSkillData.Effect) {
-            const effectsStr = activeSkill.effects;
-            const effectRegex = /\{"([^"]+)"/g;
-            let matchEffect;
-            while ((matchEffect = effectRegex.exec(effectsStr)) !== null) {
-              const effectId = matchEffect[1];
-              const effectData = activeSkillData.Effect[effectId];
-              if (effectData) {
-                if (
-                  JSON.stringify(effectData).toLowerCase().includes(searchText)
-                ) {
-                  activeSkillMatch = true;
-                  break;
-                }
-              }
-            }
-          }
-        }
-        if (activeSkillMatch) break;
-      }
+  if (searchText && !searchMatch) {
+    const indexed = searchIndex.get(skill.id);
+    if (indexed && indexed.includes(searchText)) {
+      activeSkillMatch = true;
     }
   }
 

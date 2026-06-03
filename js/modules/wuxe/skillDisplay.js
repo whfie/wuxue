@@ -12,6 +12,28 @@ import {
 import { calcParamNames, calcSelectParams } from "./calcNames.js";
 import { jsonModal, modalManager, effectModal } from "./uiManager.js";
 
+// 禁止公式函数访问的全局对象白名单（Bug 7：变量访问安全边界）
+const _BLOCKED_GLOBALS = [
+  "window",
+  "document",
+  "globalThis",
+  "self",
+  "location",
+  "history",
+  "navigator",
+  "fetch",
+  "XMLHttpRequest",
+  "eval",
+  "Function",
+  "setTimeout",
+  "setInterval",
+  "alert",
+  "confirm",
+  "prompt",
+  "localStorage",
+  "sessionStorage",
+];
+
 // 渲染优化参数
 const renderBatchSize = 20; // 每次渲染的卡片数量
 let renderTimeout = null; // 渲染超时定时器
@@ -126,10 +148,6 @@ function processEffectIds(obj, currentId, processedIds = new Set()) {
   const result = {};
 
   for (const [key, value] of Object.entries(obj)) {
-    console.log(
-      `Processing key: ${key}, value: ${value}`,
-      isPotentialEffectId(value),
-    );
     if (
       key.startsWith("arg") &&
       isPotentialEffectId(value) &&
@@ -180,7 +198,6 @@ export function showEffectDetails(
     if (oldCalc) oldCalc.remove();
 
     const contentElement = document.getElementById("effectContent");
-    console.log(effectData);
 
     // 克隆一份数据处理特定字段用于展示
     const displayData = { ...effectData };
@@ -421,8 +438,15 @@ export function showEffectDetails(
                 const ceil = Math.ceil;
                 ${f.jsScript}
               `;
-            const func = new Function(...argNames, funcBody);
-            let res = func(...argVals);
+            const func = new Function(
+              ..._BLOCKED_GLOBALS,
+              ...argNames,
+              funcBody,
+            );
+            let res = func(
+              ..._BLOCKED_GLOBALS.map(() => undefined),
+              ...argVals,
+            );
             if (typeof res === "number") {
               res = parseFloat(res.toFixed(4));
             }
@@ -456,8 +480,15 @@ export function showEffectDetails(
                 const ceil = Math.ceil;
                 ${parsedDur}
               `;
-            const func = new Function(...argNames, funcBody);
-            const durResult = func(...argVals);
+            const func = new Function(
+              ..._BLOCKED_GLOBALS,
+              ...argNames,
+              funcBody,
+            );
+            const durResult = func(
+              ..._BLOCKED_GLOBALS.map(() => undefined),
+              ...argVals,
+            );
             if (typeof durResult === "number" && durResult > 0) {
               durationT = durResult;
             }
@@ -948,23 +979,14 @@ export function updateSkillList(skillData, matchesFilters) {
             `${skill.name || id} - 武学详情`;
 
           try {
-            console.log("Loading active skill data for skill:", id);
             const activeSkillData = await import("./dataLoader.js").then(
               (module) => module.loadActiveSkillData(),
-            );
-            console.log(
-              "Loaded activeSkillData:",
-              activeSkillData ? "success" : "null",
             );
             showActiveSkills(id, activeSkillData, skill.name);
 
             // 加载被动技能数据
             const skillAutoData = await import("./dataLoader.js").then(
               (module) => module.loadSkillAutoData(),
-            );
-            console.log(
-              "Loaded skillAutoData:",
-              skillAutoData ? "success" : "null",
             );
             showPassiveSkills(id, skillAutoData);
           } catch (error) {
