@@ -54,12 +54,24 @@ export const modalManager = {
   baseZIndex: 1050,
 
   open: function (modal, element) {
+    const existingIndex = this.openModals.findIndex(
+      (m) => m.element === element,
+    );
+    let modalInfo;
+
+    if (existingIndex !== -1) {
+      [modalInfo] = this.openModals.splice(existingIndex, 1);
+      modalInfo.modal = modal;
+    } else {
+      modalInfo = {
+        modal: modal,
+        element: element,
+        zIndex: this.baseZIndex,
+      };
+    }
+
     const zIndex = this.baseZIndex + this.openModals.length * 20;
-    const modalInfo = {
-      modal: modal,
-      element: element,
-      zIndex: zIndex,
-    };
+    modalInfo.zIndex = zIndex;
     this.openModals.push(modalInfo);
 
     this.openModals.forEach((m) => {
@@ -71,10 +83,16 @@ export const modalManager = {
     element.style.zIndex = zIndex;
     element.classList.add("top-modal");
 
-    modal.show();
+    if (element.classList.contains("show")) {
+      document.body.classList.add("modal-open");
+    } else {
+      modal.show();
+    }
 
     requestAnimationFrame(() => {
-      const backdrop = document.querySelector(".modal-backdrop:last-child");
+      const backdrop =
+        document.querySelector(`[data-modal-backdrop="${element.id}"]`) ||
+        document.querySelector(".modal-backdrop:last-child");
       if (backdrop) {
         backdrop.style.zIndex = zIndex - 10;
         backdrop.setAttribute("data-modal-backdrop", element.id);
@@ -83,22 +101,28 @@ export const modalManager = {
   },
 
   close: function (element) {
-    const index = this.openModals.findIndex((m) => m.element === element);
-    if (index !== -1) {
-      this.openModals.splice(index, 1);
+    const hadModal = this.openModals.some((m) => m.element === element);
+    if (hadModal) {
+      this.openModals = this.openModals.filter((m) => m.element !== element);
       element.classList.remove("top-modal");
 
-      const backdrop = document.querySelector(
+      const backdrops = document.querySelectorAll(
         `[data-modal-backdrop="${element.id}"]`,
       );
-      if (backdrop) {
+      backdrops.forEach((backdrop) => {
         backdrop.remove();
-      }
+      });
+
+      this.openModals.forEach((m) => {
+        m.element.classList.remove("top-modal");
+      });
 
       if (this.openModals.length > 0) {
         const topModal = this.openModals[this.openModals.length - 1];
         topModal.element.classList.add("top-modal");
         topModal.element.style.zIndex = topModal.zIndex;
+        document.body.classList.add("modal-open");
+
         const topBackdrop = document.querySelector(
           `[data-modal-backdrop="${topModal.element.id}"]`,
         );
