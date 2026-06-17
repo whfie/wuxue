@@ -266,8 +266,8 @@ export function matchesFilters(skill) {
 
   const elementMatch =
     skillFilters.element.size === 0 || // 处理 element 过滤器
-    (skill.zhaoJiaDefDamageClass &&
-      skillFilters.element.has(String(skill.zhaoJiaDefDamageClass)));
+    (skill.autoZhaoAtkDamageClass &&
+      skillFilters.element.has(String(skill.autoZhaoAtkDamageClass)));
 
   const methodsMatch =
     skillFilters.methods.size === 0 || // 处理 methods 过滤器

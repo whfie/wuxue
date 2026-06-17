@@ -3,6 +3,7 @@ import {
   loadSkillData,
   loadSkillAutoData,
   loadActiveSkillData,
+  loadBookSkillUnlockData,
   getUniqueValues,
 } from "./dataLoader.js";
 import {
@@ -58,7 +59,11 @@ async function initializePage() {
         refreshSkillList();
 
         // 并行加载其他数据
-        Promise.all([loadActiveSkillData(), loadSkillAutoData()])
+        Promise.all([
+          loadActiveSkillData(),
+          loadSkillAutoData(),
+          loadBookSkillUnlockData(),
+        ])
           .then(([data2]) => {
             activeSkillData = data2;
 
@@ -76,7 +81,7 @@ async function initializePage() {
             createFilterBadges("familyFilters", families, "family");
             const elements = getUniqueValues(
               skillData.skills,
-              "zhaoJiaDefDamageClass",
+              "autoZhaoAtkDamageClass",
             );
             createFilterBadges("elementFilters", elements, "element");
             const methods = getUniqueValues(skillData.skills, "methods");

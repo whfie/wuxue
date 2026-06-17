@@ -11,6 +11,11 @@ import {
 } from "./dataLoader.js";
 import { calcParamNames, calcSelectParams } from "./calcNames.js";
 import { jsonModal, modalManager, effectModal } from "./uiManager.js";
+import {
+  conditionToCN,
+  getCHAttrName,
+  getActiveSkillLearnForBookText,
+} from "./conditionToCN.js";
 
 // 禁止公式函数访问的全局对象白名单（Bug 7：变量访问安全边界）
 const _BLOCKED_GLOBALS = [
@@ -709,9 +714,32 @@ export function showActiveSkills(skillId, activeSkillData, name) {
       html += '<hr class="my-4">';
     }
 
+    const skillType = baseActive.type;
+    const typeBadge = skillType
+      ? ` <span class="badge ${skillType === "释放" ? "bg-success" : skillType === "攻击" ? "bg-danger" : "bg-secondary"}" style="font-size: 0.65rem; vertical-align: middle;">${skillType}类</span>`
+      : "";
+
+    const skillLevel = baseActive.level;
+    const levelNames = {
+      1: "低级残页",
+      2: "中级残页",
+      3: "高级残页",
+      4: "顶级残页",
+    };
+    const levelColors = {
+      1: "bg-secondary",
+      2: "bg-info",
+      3: "bg-warning",
+      4: "bg-danger",
+    };
+    const levelBadge =
+      skillLevel && levelNames[skillLevel]
+        ? ` <span class="badge ${levelColors[skillLevel] || "bg-secondary"}" style="font-size: 0.65rem; vertical-align: middle;">${levelNames[skillLevel]}</span>`
+        : "";
+
     html += `
         <div class="mb-3">
-            <h4 class="text-primary">${baseActive.name || activeId}</h4>
+            <h4 class="text-primary">${baseActive.name || activeId}${typeBadge}${levelBadge}</h4>
         </div>`;
 
     html += `
@@ -732,62 +760,147 @@ export function showActiveSkills(skillId, activeSkillData, name) {
     const selectedSkills = allActives;
 
     if (selectedSkills.length > 1) {
-      html += `
+      // 学习条件 — 调用 conditionToCN 生成中文描述
+      const learnConditions = [];
+      for (let i = 1; i <= 10; i++) {
+        const learnIdKey = `learn_id_${i}`;
+        const learnLogicKey = `learn_logic_${i}`;
+        const learnTypeKey = `learn_type_${i}`;
+        const learnValueKey = `learn_value_${i}`;
+
+        if (
+          selectedSkills[0].data[learnIdKey] !== undefined &&
+          selectedSkills[0].data[learnLogicKey] !== undefined &&
+          selectedSkills[0].data[learnValueKey] !== undefined
+        ) {
+          const ids = String(selectedSkills[0].data[learnIdKey]).split(";");
+          const logics = String(selectedSkills[0].data[learnLogicKey]).split(
+            ";",
+          );
+          const values = String(selectedSkills[0].data[learnValueKey]).split(
+            ";",
+          );
+          const typeStr = selectedSkills[0].data[learnTypeKey] || "";
+
+          for (let j = 0; j < ids.length; j++) {
+            const rawId = ids[j].trim();
+            let logicStr = (logics[j] || logics[0] || "").trim();
+            let valueStr = (values[j] || values[0] || "").trim();
+
+            const cnText = conditionToCN(typeStr, rawId, logicStr, valueStr);
+            if (cnText) {
+              learnConditions.push(cnText);
+            } else {
+              if (typeStr === "装备武器") {
+                logicStr = "";
+                valueStr = "";
+              }
+              // 未知条件类型的兜底显示
+              learnConditions.push(
+                `${typeStr} ${getCHAttrName(rawId) || rawId} ${logicStr} ${valueStr}`,
+              );
+            }
+          }
+        }
+      }
+
+      // 追加书页解锁条件（置于学习条件第一条）
+      const bookLearnText = getActiveSkillLearnForBookText(activeId);
+      if (bookLearnText) {
+        learnConditions.unshift(bookLearnText);
+      }
+
+      if (learnConditions.length > 0) {
+        html += `
             <div>
-                <h5>绑定武学</h5>
+                <h5>学习条件</h5>
                 <div class="table-responsive">
                     <table class="table table-sm table-hover">
                         <thead>
                             <tr>
-                                <th>绑定武学</th>
+                                <th>条件</th>
                             </tr>
                         </thead>
                         <tbody>`;
-      // 检查 use_id_2, use_id_3, use_id_4 等字段
-      for (let i = 2; i <= 4; i++) {
-        const useIdKey = `use_id_${i}`;
-        const useTypeKey = `use_type_${i}`;
-        const useValueKey = `use_value_${i}`;
-        if (
-          selectedSkills[0].data[useIdKey] &&
-          selectedSkills[0].data[useTypeKey] &&
-          selectedSkills[0].data[useValueKey]
-        ) {
-          const boundactiveId = selectedSkills[0].data[useIdKey].split(" or ");
-          const boundMethodId = selectedSkills[0].data[useValueKey];
-          if (boundMethodId == "是") {
-            boundactiveId.forEach((id) => {
-              const boundSkillName = skillData.skills[id]?.name ?? id;
-
-              html += `
-                                <tr>
-                                    <td> <strong>准备 ${boundSkillName}</td>
-                                </tr>`;
-            });
-          } else {
-            boundactiveId.forEach((id) => {
-              const boundSkillName = skillData.skills[id]?.name ?? id;
-
-              html += `
-                                <tr>
-                                    <td> <strong>准备 ${boundSkillName} 为 ${getMethodName(boundMethodId)}</td>
-                                </tr>`;
-            });
-          }
-        }
-      }
-      // 主动准备位置条件
-      if (selectedSkills[0].data["methods"]) {
+        learnConditions.forEach((cond) => {
+          html += `
+                            <tr>
+                                <td><strong>${cond}</strong></td>
+                            </tr>`;
+        });
         html += `
-                        <tr>
-                            <td> <strong>准备 ${name} 为 ${getMethodName(selectedSkills[0].data["methods"])}</td>
-                        </tr>`;
-      }
-      html += `
                         </tbody>
                     </table>
                 </div>
-            </div>
+            </div>`;
+      }
+
+      // 使用条件 — 调用 conditionToCN 生成中文描述
+      const useConditions = [];
+      for (let i = 1; i <= 10; i++) {
+        const useIdKey = `use_id_${i}`;
+        const useLogicKey = `use_logic_${i}`;
+        const useTypeKey = `use_type_${i}`;
+        const useValueKey = `use_value_${i}`;
+
+        if (
+          selectedSkills[0].data[useIdKey] !== undefined &&
+          selectedSkills[0].data[useLogicKey] !== undefined &&
+          selectedSkills[0].data[useValueKey] !== undefined
+        ) {
+          const ids = String(selectedSkills[0].data[useIdKey]).split(";");
+          const logics = String(selectedSkills[0].data[useLogicKey]).split(";");
+          const values = String(selectedSkills[0].data[useValueKey]).split(";");
+          const typeStr = selectedSkills[0].data[useTypeKey] || "";
+
+          for (let j = 0; j < ids.length; j++) {
+            const rawId = ids[j].trim();
+            let logicStr = (logics[j] || logics[0] || "").trim();
+            let valueStr = (values[j] || values[0] || "").trim();
+
+            const cnText = conditionToCN(typeStr, rawId, logicStr, valueStr);
+            if (cnText) {
+              useConditions.push(cnText);
+            } else {
+              if (typeStr === "装备武器") {
+                logicStr = "";
+                valueStr = "";
+              }
+              // 未知条件类型的兜底显示
+              useConditions.push(
+                `${typeStr} ${getCHAttrName(rawId) || rawId} ${logicStr} ${valueStr}`,
+              );
+            }
+          }
+        }
+      }
+
+      if (useConditions.length > 0) {
+        html += `
+            <div>
+                <h5>使用条件</h5>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th>条件</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+        useConditions.forEach((cond) => {
+          html += `
+                            <tr>
+                                <td><strong>${cond}</strong></td>
+                            </tr>`;
+        });
+        html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>`;
+      }
+
+      html += `
             <div>
                 <h5>各重数差异
                     <button class="btn btn-sm btn-outline-primary expand-levels-btn" data-skill-id="${activeId}" style="font-size: 0.75rem; margin-left: 10px; box-shadow: none;">展开</button>
@@ -1073,7 +1186,7 @@ export function updateSkillList(skillData, matchesFilters) {
           { key: "atkSpd", label: "攻速系数" },
           { key: "neili", label: "内力系数" },
           { key: "HpRate", label: "生命系数" },
-          { key: "zhaoJiaDefDamageClass", label: "伤害/招架类型" },
+          { key: "autoZhaoAtkDamageClass", label: "伤害/招架类型" },
           { key: "zhaoJiaDefDamageParam", label: "招架减伤率" },
         ];
 
@@ -1082,7 +1195,7 @@ export function updateSkillList(skillData, matchesFilters) {
             content += `
                     <div class="attribute-row">
                         <span class="attribute-label">${attr.label}：</span>
-                        <span class="attribute-value">${attr.key === "zhaoJiaDefDamageClass" ? getElementName(skill[attr.key]) : skill[attr.key]}</span>
+                        <span class="attribute-value">${attr.key === "autoZhaoAtkDamageClass" ? getElementName(skill[attr.key]) : skill[attr.key]}</span>
                     </div>`;
           }
         });
