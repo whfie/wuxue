@@ -13,6 +13,10 @@ import {
   matchesFilters,
   toggleFilter,
   buildSearchIndex,
+  setLoadStatus,
+  scheduleRefresh,
+  getSearchThrottleTimer,
+  setSearchThrottleTimer,
 } from "./uiManager.js";
 import { updateSkillList } from "./skillDisplay.js";
 
@@ -20,11 +24,7 @@ export let skillData = null;
 export let activeSkillData = null;
 
 function refreshSkillList() {
-  if (!skillData?.skills) {
-    return;
-  }
-
-  updateSkillList(skillData, matchesFilters);
+  scheduleRefresh();
 }
 
 async function initializePage() {
@@ -33,32 +33,47 @@ async function initializePage() {
 
     createFilterBadges("familyFilters", [], "family");
     createFilterBadges("elementFilters", [], "element");
+    createFilterBadges("zhaojiaFilters", [], "zhaojia");
     createFilterBadges("methodsFilters", [], "methods");
 
-    document.getElementById("searchInput").addEventListener("input", () => {
-      refreshSkillList();
+    const searchInput = document.getElementById("searchInput");
+    searchInput.addEventListener("input", () => {
+      const timer = getSearchThrottleTimer();
+      if (timer) {
+        clearTimeout(timer);
+      }
+      setSearchThrottleTimer(setTimeout(() => {
+        refreshSkillList();
+      }, 300));
     });
 
     const urlParams = new URLSearchParams(window.location.search);
     const query = urlParams.get("q");
     if (query) {
-      document.getElementById("searchInput").value = query;
+      searchInput.value = query;
     }
 
     window.clearFilters = (filterType) => {
       clearFilters(filterType);
-      refreshSkillList();
+      const timer = getSearchThrottleTimer();
+      if (timer) {
+        clearTimeout(timer);
+      }
+      setSearchThrottleTimer(setTimeout(() => {
+        refreshSkillList();
+      }, 100));
     };
 
-    // 优先加载核心数据
+    setLoadStatus("loading");
+
     loadSkillData()
       .then((data1) => {
         skillData = data1;
 
-        // 立即更新技能列表
+        setLoadStatus("loaded");
+
         refreshSkillList();
 
-        // 并行加载其他数据
         Promise.all([
           loadActiveSkillData(),
           loadSkillAutoData(),
@@ -67,16 +82,13 @@ async function initializePage() {
           .then(([data2]) => {
             activeSkillData = data2;
 
-            // 建立搜索索引（Bug 8）
             buildSearchIndex(skillData, activeSkillData);
 
-            // 附加数据加载完成后，若搜索框已有内容则重新刷新（Bug 5）
-            const searchInput = document.getElementById("searchInput");
-            if (searchInput?.value.trim()) {
+            const currentSearchInput = document.getElementById("searchInput");
+            if (currentSearchInput?.value.trim()) {
               refreshSkillList();
             }
 
-            // 更新过滤条件等
             const families = getUniqueValues(skillData.skills, "familyList");
             createFilterBadges("familyFilters", families, "family");
             const elements = getUniqueValues(
@@ -84,6 +96,11 @@ async function initializePage() {
               "autoZhaoAtkDamageClass",
             );
             createFilterBadges("elementFilters", elements, "element");
+            const zhaojiaValues = getUniqueValues(
+              skillData.skills,
+              "zhaoJiaDefDamageClass",
+            );
+            createFilterBadges("zhaojiaFilters", zhaojiaValues, "zhaojia");
             const methods = getUniqueValues(skillData.skills, "methods");
             createFilterBadges("methodsFilters", methods, "methods");
           })
@@ -92,9 +109,11 @@ async function initializePage() {
           });
       })
       .catch((error) => {
+        setLoadStatus("error");
         console.error("加载核心数据失败:", error);
       });
   } catch (error) {
+    setLoadStatus("error");
     console.error("页面初始化失败:", error);
   }
 }
