@@ -1146,7 +1146,8 @@ export function updateSkillList(skillData, matchesFilters) {
           { key: "atkSpd", label: "攻速系数" },
           { key: "neili", label: "内力系数" },
           { key: "HpRate", label: "生命系数" },
-          { key: "autoZhaoAtkDamageClass", label: "伤害/招架类型" },
+          { key: "autoZhaoAtkDamageClass", label: "伤害属性" },
+          { key: "zhaoJiaDefDamageClass", label: "招架属性" },
           { key: "zhaoJiaDefDamageParam", label: "招架减伤率" },
         ];
 
@@ -1155,7 +1156,7 @@ export function updateSkillList(skillData, matchesFilters) {
             content += `
                     <div class="attribute-row">
                         <span class="attribute-label">${attr.label}：</span>
-                        <span class="attribute-value">${attr.key === "autoZhaoAtkDamageClass" ? getElementName(skill[attr.key]) : skill[attr.key]}</span>
+                        <span class="attribute-value">${["autoZhaoAtkDamageClass", "zhaoJiaDefDamageClass"].includes(attr.key) ? getElementName(skill[attr.key]) : skill[attr.key]}</span>
                     </div>`;
           }
         });
